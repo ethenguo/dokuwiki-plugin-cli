@@ -32,9 +32,12 @@ require_once(DOKU_PLUGIN.'syntax.php');
  */
 class syntax_plugin_cli extends DokuWiki_Syntax_Plugin {
     
-    var $prompt_str = '$ ';
+    # 增加：可处理提示符有两种以上情况
+    # Adding: Handle two more prompt cituation
+    var $prompt_str = '$ |# ';
     var $prompt_cont = '/^> /'; // this is a regex
     var $prompt_continues = false;
+    var $css_root = '';
     var $comment_str = '#';
     
     /**
@@ -195,20 +198,31 @@ class syntax_plugin_cli extends DokuWiki_Syntax_Plugin {
         $lines = preg_split('/\n\r|\n|\r/',$match);
         if ( trim($lines[0]) == "" ) unset( $lines[0] );
         if ( trim($lines[count($lines)]) == "" ) unset( $lines[count($lines)] );
+        # 增加：可处理提示符有两种以上情况
+        $prompt_array = preg_split('/\|/',$this->prompt_str);
         foreach ($lines as $line) {
-            $index = strpos($line, $this->prompt_str);
+            # 增加：可处理提示符有两种以上情况，var $prompt_str = '$ |# ';
+            $index = false;
+            foreach ($prompt_array as $key => $prompt_str) {
+                $index_array[$key] = strpos($line, $prompt_str);
+                # 增加：出现连续两个以上"#"时，视为“输出”
+                if (strpos($line, "##")) {
+                    continue;
+                }
+                $index = $index || ($index_array[$key]===false?false:true);
+            }
             if ($index === false) {   
                 if ($this->prompt_continues) {
                   if (preg_match($this->prompt_cont, $line, $promptc) === 0) $this->prompt_continues = false;
                 }
                 if ($this->prompt_continues) {
                     // format prompt
-                    $renderer->doc .= '<span class="cli_prompt">' . $renderer->_xmlEntities($promptc[0]) . "</span>";
+                    $renderer->doc .= '<span class="cli_prompt' . $this->css_root . '">' . $renderer->_xmlEntities($promptc[0]) . "</span>";
                     // Split line into command + optional comment (only end-of-line comments supported)
                     $command =  preg_split($this->prompt_cont, $line);
                     $commands = explode($this->comment_str, $command[1]);
                     // Render command
-                    $renderer->doc .= '<span class="cli_command">' . $renderer->_xmlEntities($commands[0]) . "</span>";
+                    $renderer->doc .= '<span class="cli_command' . $this->css_root . '">' . $renderer->_xmlEntities($commands[0]) . "</span>";
                     // Render comment if there is one
                     if ($commands[1]) {
                         $renderer->doc .= '<span class="cli_comment">' .
@@ -223,12 +237,24 @@ class syntax_plugin_cli extends DokuWiki_Syntax_Plugin {
             } else {
                 $this->prompt_continues = true;
                 // format prompt
-                $prompt = substr($line, 0, $index) . $this->prompt_str;
-                $renderer->doc .= '<span class="cli_prompt">' . $renderer->_xmlEntities($prompt) . "</span>";
+                # 增加：可处理提示符有两种以上情况
+                $this->css_root = '';
+                $prompt_str = null;
+                foreach ($prompt_array as $key => $value) {
+                    if ($index_array[$key] !== false) {
+                        $index = $index_array[$key];
+                        $prompt_str = $prompt_array[$key];
+                        if ($prompt_str === "# ") {
+                            $this->css_root = '_root';
+                        }
+                    }
+                }
+                $prompt = substr($line, 0, $index) . $prompt_str;
+                $renderer->doc .= '<span class="cli_prompt' . $this->css_root . '">' . $renderer->_xmlEntities($prompt) . "</span>";
                 // Split line into command + optional comment (only end-of-line comments supported)
-                $commands = explode($this->comment_str, substr($line, $index + strlen($this->prompt_str)));
+                $commands = explode($this->comment_str, substr($line, $index + strlen($prompt_str)));
                 // Render command
-                 $renderer->doc .= '<span class="cli_command">' . $renderer->_xmlEntities($commands[0]) . "</span>";
+                 $renderer->doc .= '<span class="cli_command' . $this->css_root . '">' . $renderer->_xmlEntities($commands[0]) . "</span>";
                 // Render comment if there is one
                 if ($commands[1]) {
                      $renderer->doc .= '<span class="cli_comment">' .
